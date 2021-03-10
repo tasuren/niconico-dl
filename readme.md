@@ -2,7 +2,7 @@
 ニコニコ動画の動画をダウンロードすることができるPythonモジュールです。  
 使用は自己責任で違法な用途には使用しないでください。  
 そしてサーバーに負荷がかからない程度で、使用してください。  
-`pip install niconico_dl`  
+`pip install niconico-dl`  
 
 # Example / 例
 sm9720246の部分はIDで動画のURLの最後の部分です。  
