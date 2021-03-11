@@ -45,3 +45,31 @@ niconico.close()
 # 最後にはこれを置く。 それかniconicoに別のものを入れる。
 # ※URLを使い終わったら実行をしないとURLが無効になります。
 ```
+# 非同期版
+`pip install niconico-dl-async`  
+```python
+from asyncio import get_event_loop
+from niconico_dl_async import NicoNico
+
+
+async def download(nicoid):
+
+	niconico = NicoNico(nicoid)
+	# その他引数でlog=Falseがあり、Trueにすると進行状況が出力されます。
+
+	data = await niconico.get_info()
+	title = data["video"]["title"]
+	print(title)
+	# 【東方合同動画企画】魔理沙とアリスのクッキーKiss
+
+	await niconico.download(title + ".mp4")
+	# その他引数：timeout=5,chunk_size=1024
+	url = await niconico.get_download_link()
+	# 注意：closeをしてしばらくするとURLは使えなくなります。
+
+	niconico.close()
+	# 最後にはこれを置く。 それかniconicoに別のものを入れる。
+
+
+get_event_loop().run_until_complete(download("sm9720246"))
+```
