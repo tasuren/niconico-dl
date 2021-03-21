@@ -8,7 +8,7 @@ from json import loads,dumps
 from time import time
 
 
-version = "1.0.0"
+version = "1.1.0"
 
 
 def par(max_num, now):
@@ -55,18 +55,19 @@ class NicoNico():
 
         data = soup.find("div", {"id": "js-initial-watch-data"}).get("data-api-data")
         self.data = loads(data)
-        self.dmc = self.data["video"]["dmcInfo"]
+        movie = self.data["media"]["delivery"]["movie"]
 
         # heartbeat用のdataを作る。
-        data = self.dmc["session_api"]
+        session =  movie["session"]
+        data = {}
         data["content_type"] = "movie"
         data["content_src_id_sets"] = [
             {
                 "content_src_ids":[
                     {
                         "src_id_to_mux": {
-                            "video_src_ids": data["videos"],
-                            "audio_src_ids": [data["audios"][0]]
+                            "video_src_ids": [movie["videos"][0]["id"]],
+                            "audio_src_ids": [movie["audios"][0]["id"]]
                         }
                     }
                 ]
@@ -75,19 +76,20 @@ class NicoNico():
         data["timing_constraint"] = "unlimited"
         data["keep_method"] = {
             "heartbeat": {
-                "lifetime": data["heartbeat_lifetime"]
+                "lifetime": session["heartbeatLifetime"]
             }
         }
+        data["recipe_id"] = session["recipeId"]
+        data["priority"] = session["priority"]
         data["protocol"] = {
             "name": "http",
             "parameters": {
                 "http_parameters": {
                     "parameters": {
                         "http_output_download_parameters": {
-                            "use_well_known_port": "yes" if data["urls"][0]["is_well_known_port"] else "no",
-                            "use_ssl": "yes" if data["urls"][0]["is_ssl"] else "no",
-                            "transfer_preset": "",
-                            "segment_duration": 6000
+                            "use_well_known_port": "yes" if session["urls"][0]["isWellKnownPort"] else "no",
+                            "use_ssl": "yes" if session["urls"][0]["isSsl"] else "no",
+                            "transfer_preset": ""
                         }
                     }
                 }
@@ -96,18 +98,19 @@ class NicoNico():
         data["content_uri"] = ""
         data["session_operation_auth"] = {
             "session_operation_auth_by_signature": {
-                "token": data["token"],
-                "signature": data["signature"]
+                "token": session["token"],
+                "signature": session["signature"]
             }
         }
+        data["content_id"] = session["contentId"]
         data["content_auth"] = {
-            "auth_type": data["auth_types"]["http"],
-            "content_key_timeout": data["content_key_timeout"],
+            "auth_type": session["authTypes"]["http"],
+            "content_key_timeout": session["contentKeyTimeout"],
             "service_id": "nicovideo",
-            "service_user_id": str(data["service_user_id"])
+            "service_user_id": str(session["serviceUserId"])
         }
         data["client_info"] = {
-            "player_id": data["player_id"]
+            "player_id": session["playerId"]
         }
 
         self.heartbeat_first_data = {"session": data}
