@@ -66,8 +66,8 @@ class NicoNico():
                 "content_src_ids":[
                     {
                         "src_id_to_mux": {
-                            "video_src_ids": [movie["videos"][0]["id"]],
-                            "audio_src_ids": [movie["audios"][0]["id"]]
+                            "video_src_ids": [session["videos"][0]],
+                            "audio_src_ids": [session["audios"][0]]
                         }
                     }
                 ]
