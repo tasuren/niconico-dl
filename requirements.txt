@@ -1,0 +1,3 @@
+aiohttp
+ujson
+bs4

@@ -14,7 +14,7 @@ URLS = {
 }
 
 
-class NicoNicoVideoAsync(ClientSession):
+class NicoNicoVideoAsync:
     """
     ニコニコ動画の情報や動画を取得するためのクラスです。  
     ですがこれは非同期版です。(通常は`NicoNicoVideo`です。)
@@ -35,9 +35,9 @@ class NicoNicoVideoAsync(ClientSession):
                       if log else lambda content: "")
         self.headers, self.url = headers, url
         self.data = {}
+        self.session = ClientSession(raise_for_status=True)
         self.working_heartbeat = asyncio.Event()
         self.stop = False
-        super().__init__(raise_for_status=True)
 
     async def get_info(self) -> dict:
         """
@@ -54,7 +54,7 @@ class NicoNicoVideoAsync(ClientSession):
             ニコニコ動画から情報を取得するのに失敗した際に発生します。
         """
         self.print("Getting video data...")
-        async with self.get(self.url, headers=self.headers) as r:
+        async with self.session.get(self.url, headers=self.headers) as r:
             if not self.data:
                 soup = bs(await r.text(), "html.parser")
                 data = soup.find("div", {"id": "js-initial-watch-data"}).get("data-api-data")
@@ -86,9 +86,9 @@ class NicoNicoVideoAsync(ClientSession):
         self.print("Starting heartbeat...")
         if not self.data:
             await self.get_info()
-        session = await make_sessiondata(self.data)
+        session = make_sessiondata(self.data["media"]["delivery"]["movie"])
         self.print("Sending Heartbeat Init Data...")
-        async with self.post(
+        async with self.session.post(
                 URLS["base_heartbeat"] + "?_format=json",
                 headers=self.headers, data=dumps(session)) as r:
             self.result_data = (await r.json(loads=loads))["data"]["session"]
@@ -100,7 +100,7 @@ class NicoNicoVideoAsync(ClientSession):
         while not self.stop:
             now = time()
             self.print("Sending heartbeat...")
-            async with self.post(
+            async with self.session.post(
                     URLS["base_heartbeat"] + f"/{session_id}?_format=json&_method=PUT",
                     headers=self.headers, data=data) as r:
                 self.result_data = (await r.json(loads=loads))["data"]["session"]

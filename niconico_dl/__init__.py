@@ -95,4 +95,4 @@ def make_sessiondata(movie: dict) -> dict:
         "player_id": session["playerId"]
     }
 
-    return data
+    return {"session": data}
