@@ -54,7 +54,7 @@ class NicoNicoVideoAsync:
             ニコニコ動画から情報を取得するのに失敗した際に発生します。
         """
         self.print("Getting video data...")
-        async with self.session.get(self.url, headers=self.headers) as r:
+        async with self.session.get(self.url, headers=self.headers[0]) as r:
             if not self.data:
                 soup = bs(await r.text(), "html.parser")
                 data = soup.find("div", {"id": "js-initial-watch-data"}).get("data-api-data")
@@ -86,11 +86,13 @@ class NicoNicoVideoAsync:
         self.print("Starting heartbeat...")
         if not self.data:
             await self.get_info()
+        print(dumps(self.data["media"]["delivery"]["movie"]))
         session = make_sessiondata(self.data["media"]["delivery"]["movie"])
         self.print("Sending Heartbeat Init Data...")
+        print(dumps(session))
         async with self.session.post(
                 URLS["base_heartbeat"] + "?_format=json",
-                headers=self.headers, data=dumps(session)) as r:
+                headers=self.headers[1], data=dumps(session)) as r:
             self.result_data = (await r.json(loads=loads))["data"]["session"]
         session_id = self.result_data["id"]
         self.print("Done. session_id. : " + str(session_id))
