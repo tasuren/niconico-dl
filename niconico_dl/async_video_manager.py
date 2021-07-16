@@ -89,7 +89,6 @@ class NicoNicoVideoAsync:
         print(dumps(self.data["media"]["delivery"]["movie"]))
         session = make_sessiondata(self.data["media"]["delivery"]["movie"])
         self.print("Sending Heartbeat Init Data...")
-        print(dumps(session))
         async with self.session.post(
                 URLS["base_heartbeat"] + "?_format=json",
                 headers=self.headers[1], data=dumps(session)) as r:
@@ -104,7 +103,7 @@ class NicoNicoVideoAsync:
             self.print("Sending heartbeat...")
             async with self.session.post(
                     URLS["base_heartbeat"] + f"/{session_id}?_format=json&_method=PUT",
-                    headers=self.headers, data=data) as r:
+                    headers=self.headers[1], data=data) as r:
                 self.result_data = (await r.json(loads=loads))["data"]["session"]
             self.print("Done.")
             data = dumps({"session": self.result_data})

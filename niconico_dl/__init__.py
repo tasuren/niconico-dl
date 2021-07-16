@@ -3,6 +3,7 @@
 """
 
 from .async_video_manager import *
+from copy import copy
 
 
 __version__ = "1.0.0a1"
@@ -59,18 +60,21 @@ def make_sessiondata(movie: dict, mode: str = MODES[0]) -> dict:
     session =  movie["session"]
 
     data["content_type"] = "movie"
-    data["content_src_id_sets"] = [
-        {
-            "content_src_ids":[
-                {
-                    "src_id_to_mux": {
-                        "video_src_ids": [movie["videos"][0]["id"]],
-                        "audio_src_ids": [movie["audios"][0]["id"]]
-                    }
-                }
-            ]
+    data["content_src_id_sets"] = [{"content_src_ids": []}]
+    print(session["videos"], session["audios"])
+    lv, la = len(session["videos"]), len(session["audios"])
+    for _ in range(lv if lv >= la else la):
+        src_id_to_mux = {
+            "src_id_to_mux": {
+                "video_src_ids": copy(session["videos"]),
+                "audio_src_ids": copy(session["audios"])
+            }
         }
-    ]
+        data["content_src_id_sets"][0]["content_src_ids"].append(src_id_to_mux)
+        for k in ("videos", "audios"):
+            if len(session[k]) != 1:
+                session[k].pop(0)
+    del src_id_to_mux
     data["timing_constraint"] = "unlimited"
     data["keep_method"] = {
         "heartbeat": {
@@ -118,5 +122,6 @@ def make_sessiondata(movie: dict, mode: str = MODES[0]) -> dict:
     data["client_info"] = {
         "player_id": session["playerId"]
     }
+    del session, movie
 
     return {"session": data}
