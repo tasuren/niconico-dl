@@ -6,7 +6,7 @@ from .async_video_manager import *
 from copy import copy
 
 
-__version__ = "1.0.0a1"
+__version__ = "1.0.0a2"
 
 
 __all__ = ("HEADERS", "NicoNicoAcquisitionFailed", "NicoNicoVideoAsync")
@@ -61,7 +61,6 @@ def make_sessiondata(movie: dict, mode: str = MODES[0]) -> dict:
 
     data["content_type"] = "movie"
     data["content_src_id_sets"] = [{"content_src_ids": []}]
-    print(session["videos"], session["audios"])
     lv, la = len(session["videos"]), len(session["audios"])
     for _ in range(lv if lv >= la else la):
         src_id_to_mux = {
@@ -71,6 +70,8 @@ def make_sessiondata(movie: dict, mode: str = MODES[0]) -> dict:
             }
         }
         data["content_src_id_sets"][0]["content_src_ids"].append(src_id_to_mux)
+        if mode == MODES[1]:
+            break
         for k in ("videos", "audios"):
             if len(session[k]) != 1:
                 session[k].pop(0)
