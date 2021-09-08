@@ -21,7 +21,7 @@ else:
 setup(
     name='niconico_dl',
     version=__version__,
-    description='Encryption Module',
+    description='ニコニコ動画ダウンローダー NicoNico Video Downloader',
     long_description=long_description,
     long_description_content_type="text/markdown",
     url='https://tasuren.github.io/niconico_dl/',
