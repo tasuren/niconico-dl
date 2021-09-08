@@ -11,7 +11,11 @@ else:
     long_description = "..."
 
 
-requires = []
+if exists("requirements.txt"):
+    with open("requirements.txt", "r") as f:
+        requires = f.read().splitlines()
+else:
+    requires = []
 
 
 setup(
