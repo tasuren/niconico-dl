@@ -48,6 +48,7 @@ class NicoNicoVideoAsync:
     ):
         self.loop: asyncio.AbstractEventLoop = loop or asyncio.get_event_loop()
         self._headers = headers or HEADERS
+        self._download_link = None
         self.heartbeat_task: asyncio.Task = None
 
         self._url, self._log = url, log
@@ -165,15 +166,15 @@ class NicoNicoVideoAsync:
         ですのでHeartbeatを止める`close`はダウンロードリンクの使用が終わってから実行しましょう。  
         したがって`async with`構文を使用して取得したダウンロードリンクはすぐに使えなくなることがあるので注意してください。
         """
-        if self.download_link is None:
+        if self._download_link is None:
             # Heartbeatが動いていないなら動かす。
             if not self.is_working_heartbeat():
                 await self.connect()
             # Heartbeatが動画のURLを取得するまで待機する。
             await self.wait_until_working_heartbeat()
-            self.download_link = self.result_data["content_uri"]
+            self._download_link = self.result_data["content_uri"]
 
-        return self.download_link
+        return self._download_link
 
     async def download(self, path: str, load_chunk_size: int = 1024) -> None:
         """ニコニコ動画の動画をダウンロードします。  
