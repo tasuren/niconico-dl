@@ -42,6 +42,9 @@ class NicoNicoVideo:
         self._headers = headers or HEADERS
         self.heartbeat_thread: Thread = None
 
+        if "nico.ms" in url:
+            url = url.replace("nico.ms/", "www.nicovideo.jp/watch/")
+
         self._url, self._log = url, log
         self._data, self._download_link = {}, None
         self._working_heartbeat = False
@@ -95,9 +98,6 @@ class NicoNicoVideo:
         self._stop = True
         self.heartbeat_thread.join()
 
-    def __del__(self):
-        self.close()
-
     def get_info(self) -> dict:
         """ニコニコ動画のウェブページから動画のデータを取得する関数です。
 
@@ -115,7 +115,7 @@ class NicoNicoVideo:
             # もし動画データを取得していないなら動画URLのHTMLから動画データを取得する。
             # Heartbeatの通信にも必要なものでもあります。
             soup = BeautifulSoup(
-                requests.get(self._url, headers=self._headers[0]).text,
+                requests.get(self._url, headers=self._headers[2]).text,
                 "html.parser"
             )
             data = soup.find(
@@ -237,15 +237,15 @@ class NicoNicoVideo:
             self.get_info()
 
         # セッションに必要なデータを`NicoNicoVideoAsync.get_info`で取得したデータから取得します。
-        session = _make_sessiondata(
+        data = _make_sessiondata(
             self._data["media"]["delivery"]["movie"], mode=mode
         )
-        self.print("Sending Heartbeat Init Data... :", dumps(session))
+        self.print("Sending Heartbeat Init Data... :", data)
 
         # 一番最初のHeartbeatの通信をします。
         r = requests.post(
             URLS["base_heartbeat"] + "?_format=json",
-            headers=self._headers[1], data=dumps(session)
+            headers=self._headers[1], data=dumps(data)
         )
         self.result_data = r.json()["data"]["session"]
         session_id = self.result_data["id"]
@@ -253,16 +253,26 @@ class NicoNicoVideo:
         self.print("Done. session_id. : " + str(session_id))
         self._working_heartbeat = True
 
-        data = self.result_data
-        after = time() + data["keep_method"]["heartbeat"]["lifetime"] - 1
+        data, first = {"session": self.result_data}, True
+        get_interval = lambda now: now + data["session"]["keep_method"]["heartbeat"]["lifetime"] / 1000 - 3
+        make_url = lambda session_id: f"{URLS['base_heartbeat']}/{session_id}?_format=json&_method=PUT"
+        after = get_interval(time())
+
         while not self._stop:
             now = time()
             # ここで定期的にHeartbeatを送ります。
             if now >= after:
                 self.print("Sending heartbeat...", data)
+
+                if first:
+                    # 最初は普通とは違うものを先にリクエストする必要があるのでそれをリクエストする。
+                    r = requests.options(make_url(session_id), headers=self._headers[0])
+                    r.raise_for_status()
+                    first = False
+
                 r = requests.post(
-                    URLS["base_heartbeat"] + f"/{session_id}?_format=json&_method=PUT",
-                    headers=self._headers[1], data=dumps(data)
+                    make_url(session_id), headers=self._headers[1],
+                    data=dumps(data)
                 )
                 self.result_data = r.json()["data"]["session"]
 
@@ -270,6 +280,6 @@ class NicoNicoVideo:
                 data = {"session": self.result_data}
                 self.print("Received data", data)
 
-                after = now + data["keep_method"]["heartbeat"]["lifetime"] - 1
+                after = get_interval(now)
             else:
                 sleep(0.05)

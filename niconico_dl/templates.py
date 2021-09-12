@@ -3,13 +3,44 @@
 from copy import copy
 
 
-"""リファレンスに載せるもののリストです。"""
 HEADERS = [
+    {
+        "Host": "api.dmc.nico",
+        "Connection": "keep-alive",
+        "Accept": "*/*",
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "content-type",
+        "Origin": "https://www.nicovideo.jp",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.63 Safari/537.36 Edg/93.0.961.38",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "cross-site",
+        "Sec-Fetch-Dest": "empty",
+        "Referer": "https://www.nicovideo.jp/",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Language": "ja,en;q=0.9,en-GB;q=0.8,en-US;q=0.7"
+    },
+    {
+        "Host": "api.dmc.nico",
+        "Connection": "keep-alive",
+        "sec-ch-ua": '"Microsoft Edge";v="93", " Not;A Brand";v="99", "Chromium";v="93"',
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "sec-ch-ua-mobile": "?0",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.63 Safari/537.36 Edg/93.0.961.38",
+        "sec-ch-ua-platform": "Windows",
+        "Origin": "https://www.nicovideo.jp",
+        "Sec-Fetch-Site": "cross-site",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Dest": "empty",
+        "Referer": "https://www.nicovideo.jp/",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Language": "ja,en;q=0.9,en-GB;q=0.8,en-US;q=0.7"
+    },
     {
         "Host": "www.nicovideo.jp",
         "Connection": "keep-alive",
         "Cache-Control": "max-age=0",
-        "sec-ch-ua": 'Chromium";v="92", " Not A;Brand";v="99", "Microsoft Edge";v="92',
+        "sec-ch-ua": '"Microsoft Edge";v="93", " Not;A Brand";v="99", "Chromium";v="93"',
         "sec-ch-ua-mobile": "?0",
         "Upgrade-Insecure-Requests": "1",
         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.40 Safari/537.36 Edg/92.0.902.9",
@@ -19,20 +50,6 @@ HEADERS = [
         "Sec-Fetch-User": "?1",
         "Sec-Fetch-Dest": "document",
         "Accept-Encoding": "gzip, deflate, br",
-        "Accept-Language": "ja,en;q=0.9,en-GB;q=0.8,en-US;q=0.7"
-    },
-    {
-        "Connection": "keep-alive",
-        "sec-ch-ua": '"Chromium";v="92", " Not A;Brand";v="99", "Microsoft Edge";v="92"',
-        "Accept": "application/json",
-        "sec-ch-ua-mobile": "?0",
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.40 Safari/537.36 Edg/92.0.902.9",
-        "Content-Type": "application/json",
-        "Origin": "https://www.nicovideo.jp",
-        "Sec-Fetch-Site": "cross-site",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Dest": "empty",
-        "Referer": "https://www.nicovideo.jp/",
         "Accept-Language": "ja,en;q=0.9,en-GB;q=0.8,en-US;q=0.7"
     }
 ]

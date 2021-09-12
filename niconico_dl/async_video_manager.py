@@ -6,6 +6,7 @@ from aiofiles import open as async_open
 from aiohttp import ClientSession
 from json import loads, dumps
 from bs4 import BeautifulSoup
+from time import time
 import asyncio
 
 from .templates import (
@@ -51,6 +52,9 @@ class NicoNicoVideoAsync:
         self._download_link = None
         self.heartbeat_task: asyncio.Task = None
 
+        if "nico.ms" in url:
+            url = url.replace("nico.ms/", "www.nicovideo.jp/watch/")
+
         self._url, self._log = url, log
         self._data, self._download_link = {}, None
         self._session = ClientSession(raise_for_status=True)
@@ -94,23 +98,27 @@ class NicoNicoVideoAsync:
         )
         await self.wait_until_working_heartbeat()
 
-    def close(self, close_loop: bool = True) -> None:
+    def close(self) -> None:
         """NicoNicoVideoAsyncを終了します。  
         動画のダウンロードに必要な通信をするHeartbeatを止めます。  
         もし動画のダウンロードが終わったのならこれを実行してください。  
         `async with`構文を使用するのならこれを実行する必要はありません。  
         `async with`構文の使用例は`connect`にあります。
 
-        Parameters
-        ----------
-        close_loop : bool, default True
-            これの実行時に使用したイベントループも閉じるかどうかです。"""
+        Warnings
+        --------
+        これを使用してもイベントループは閉じません。"""
         self._stop = True
-        if close_loop and not self.loop.is_closed():
-            self.loop.close()
-
-    def __del__(self):
-        self.close()
+        if self.heartbeat_task:
+            try:
+                self.heartbeat_task.cancel()
+            except Exception as e:
+                if not isinstance(e, asyncio.CancelledError):
+                    raise e
+        if self.loop.is_closed():
+            self._session.detach()
+        else:
+            self.loop.create_task(self._session.close())
 
     async def get_info(self) -> dict:
         """ニコニコ動画のウェブページから動画のデータを取得するコルーチン関数です。
@@ -128,7 +136,7 @@ class NicoNicoVideoAsync:
         if not self._data:
             # もし動画データを取得していないなら動画URLのHTMLから動画データを取得する。
             # Heartbeatの通信にも必要なものでもあります。
-            async with self._session.get(self._url, headers=self._headers[0]) as r:
+            async with self._session.get(self._url, headers=self._headers[2]) as r:
                 soup = BeautifulSoup(await r.text(), "html.parser")
                 data = soup.find("div", {"id": "js-initial-watch-data"}).get("data-api-data")
                 if data:
@@ -243,15 +251,15 @@ class NicoNicoVideoAsync:
             await self.get_info()
 
         # セッションに必要なデータを`NicoNicoVideoAsync.get_info`で取得したデータから取得します。
-        session = _make_sessiondata(
+        data = _make_sessiondata(
             self._data["media"]["delivery"]["movie"], mode=mode
         )
-        self.print("Sending Heartbeat Init Data... :", dumps(session))
+        self.print("Sending Heartbeat Init Data... :", data)
 
         # 一番最初のHeartbeatの通信をします。
         async with self._session.post(
             URLS["base_heartbeat"] + "?_format=json",
-            headers=self._headers[1], json=session
+            headers=self._headers[1], json=data
         ) as r:
             self.result_data = (await r.json(loads=loads))["data"]["session"]
         session_id = self.result_data["id"]
@@ -259,22 +267,34 @@ class NicoNicoVideoAsync:
         self.print("Done. session_id. : " + str(session_id))
         self._working_heartbeat.set()
 
-        data = self.result_data
+        data, first = {"session": self.result_data}, True
+        get_interval = lambda now: now + data["session"]["keep_method"]["heartbeat"]["lifetime"] / 1000 - 3
+        make_url = lambda session_id: f"{URLS['base_heartbeat']}/{session_id}?_format=json&_method=PUT"
+        after = get_interval(time())
+
         while not self._stop:
+            now = time()
             # ここで定期的にHeartbeatを送ります。
-            await asyncio.sleep(
-                data["keep_method"]["heartbeat"]["lifetime"] - 1
-            )
+            if now >= after:
+                self.print("Sending heartbeat...", data)
 
-            self.print("Sending heartbeat...", data)
-            async with self._session.post(
-                URLS["base_heartbeat"] + f"/{session_id}?_format=json&_method=PUT",
-                headers=self._headers[1], json=data
-            ) as r:
-                self.result_data = (await r.json(loads=loads))["data"]["session"]
+                if first:
+                    # 最初は普通とは違うやつもリクエストしないといけないのでする。
+                    async with self._session.options(
+                        make_url(session_id), headers=self._headers[0]
+                    ) as r:
+                        r.raise_for_status()
+                    first = False
 
-            self.print("Done.")
-            data = {"session": self.result_data}
-            self.print("Received data", data)
+                async with self._session.post(
+                    make_url(session_id),
+                    headers=self._headers[1], json=data
+                ) as r:
+                    self.result_data = (await r.json(loads=loads))["data"]["session"]
 
-        self._session.close()
+                self.print("Done.")
+                data = {"session": self.result_data}
+
+                after = get_interval(now)
+            else:
+                await asyncio.sleep(0.05)
