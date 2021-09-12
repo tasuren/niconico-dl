@@ -2,6 +2,7 @@
 # niconico_dl
 ニコニコ動画にある動画をダウンロードするためのPython用のライブラリです。  
 リファレンス：https://tasuren.github.io/niconico_dl/
+Github：https://github.com/tasuren/niconico_dl/
 
 ## Install
 `pip install niconico_dl`

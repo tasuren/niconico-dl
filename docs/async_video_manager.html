@@ -34,6 +34,7 @@ from aiofiles import open as async_open
 from aiohttp import ClientSession
 from json import loads, dumps
 from bs4 import BeautifulSoup
+from time import time
 import asyncio
 
 from .templates import (
@@ -76,7 +77,11 @@ class NicoNicoVideoAsync:
     ):
         self.loop: asyncio.AbstractEventLoop = loop or asyncio.get_event_loop()
         self._headers = headers or HEADERS
+        self._download_link = None
         self.heartbeat_task: asyncio.Task = None
+
+        if &#34;nico.ms&#34; in url:
+            url = url.replace(&#34;nico.ms/&#34;, &#34;www.nicovideo.jp/watch/&#34;)
 
         self._url, self._log = url, log
         self._data, self._download_link = {}, None
@@ -121,23 +126,27 @@ class NicoNicoVideoAsync:
         )
         await self.wait_until_working_heartbeat()
 
-    def close(self, close_loop: bool = True) -&gt; None:
+    def close(self) -&gt; None:
         &#34;&#34;&#34;NicoNicoVideoAsyncを終了します。  
         動画のダウンロードに必要な通信をするHeartbeatを止めます。  
         もし動画のダウンロードが終わったのならこれを実行してください。  
         `async with`構文を使用するのならこれを実行する必要はありません。  
         `async with`構文の使用例は`connect`にあります。
 
-        Parameters
-        ----------
-        close_loop : bool, default True
-            これの実行時に使用したイベントループも閉じるかどうかです。&#34;&#34;&#34;
+        Warnings
+        --------
+        これを使用してもイベントループは閉じません。&#34;&#34;&#34;
         self._stop = True
-        if close_loop and not self.loop.is_closed():
-            self.loop.close()
-
-    def __del__(self):
-        self.close()
+        if self.heartbeat_task:
+            try:
+                self.heartbeat_task.cancel()
+            except Exception as e:
+                if not isinstance(e, asyncio.CancelledError):
+                    raise e
+        if self.loop.is_closed():
+            self._session.detach()
+        else:
+            self.loop.create_task(self._session.close())
 
     async def get_info(self) -&gt; dict:
         &#34;&#34;&#34;ニコニコ動画のウェブページから動画のデータを取得するコルーチン関数です。
@@ -155,7 +164,7 @@ class NicoNicoVideoAsync:
         if not self._data:
             # もし動画データを取得していないなら動画URLのHTMLから動画データを取得する。
             # Heartbeatの通信にも必要なものでもあります。
-            async with self._session.get(self._url, headers=self._headers[0]) as r:
+            async with self._session.get(self._url, headers=self._headers[2]) as r:
                 soup = BeautifulSoup(await r.text(), &#34;html.parser&#34;)
                 data = soup.find(&#34;div&#34;, {&#34;id&#34;: &#34;js-initial-watch-data&#34;}).get(&#34;data-api-data&#34;)
                 if data:
@@ -193,15 +202,15 @@ class NicoNicoVideoAsync:
         ですのでHeartbeatを止める`close`はダウンロードリンクの使用が終わってから実行しましょう。  
         したがって`async with`構文を使用して取得したダウンロードリンクはすぐに使えなくなることがあるので注意してください。
         &#34;&#34;&#34;
-        if self.download_link is None:
+        if self._download_link is None:
             # Heartbeatが動いていないなら動かす。
             if not self.is_working_heartbeat():
                 await self.connect()
             # Heartbeatが動画のURLを取得するまで待機する。
             await self.wait_until_working_heartbeat()
-            self.download_link = self.result_data[&#34;content_uri&#34;]
+            self._download_link = self.result_data[&#34;content_uri&#34;]
 
-        return self.download_link
+        return self._download_link
 
     async def download(self, path: str, load_chunk_size: int = 1024) -&gt; None:
         &#34;&#34;&#34;ニコニコ動画の動画をダウンロードします。  
@@ -270,15 +279,15 @@ class NicoNicoVideoAsync:
             await self.get_info()
 
         # セッションに必要なデータを`NicoNicoVideoAsync.get_info`で取得したデータから取得します。
-        session = _make_sessiondata(
+        data = _make_sessiondata(
             self._data[&#34;media&#34;][&#34;delivery&#34;][&#34;movie&#34;], mode=mode
         )
-        self.print(&#34;Sending Heartbeat Init Data... :&#34;, dumps(session))
+        self.print(&#34;Sending Heartbeat Init Data... :&#34;, data)
 
         # 一番最初のHeartbeatの通信をします。
         async with self._session.post(
             URLS[&#34;base_heartbeat&#34;] + &#34;?_format=json&#34;,
-            headers=self._headers[1], json=session
+            headers=self._headers[1], json=data
         ) as r:
             self.result_data = (await r.json(loads=loads))[&#34;data&#34;][&#34;session&#34;]
         session_id = self.result_data[&#34;id&#34;]
@@ -286,25 +295,37 @@ class NicoNicoVideoAsync:
         self.print(&#34;Done. session_id. : &#34; + str(session_id))
         self._working_heartbeat.set()
 
-        data = self.result_data
+        data, first = {&#34;session&#34;: self.result_data}, True
+        get_interval = lambda now: now + data[&#34;session&#34;][&#34;keep_method&#34;][&#34;heartbeat&#34;][&#34;lifetime&#34;] / 1000 - 3
+        make_url = lambda session_id: f&#34;{URLS[&#39;base_heartbeat&#39;]}/{session_id}?_format=json&amp;_method=PUT&#34;
+        after = get_interval(time())
+
         while not self._stop:
+            now = time()
             # ここで定期的にHeartbeatを送ります。
-            await asyncio.sleep(
-                data[&#34;keep_method&#34;][&#34;heartbeat&#34;][&#34;lifetime&#34;] - 1
-            )
+            if now &gt;= after:
+                self.print(&#34;Sending heartbeat...&#34;, data)
 
-            self.print(&#34;Sending heartbeat...&#34;, data)
-            async with self._session.post(
-                URLS[&#34;base_heartbeat&#34;] + f&#34;/{session_id}?_format=json&amp;_method=PUT&#34;,
-                headers=self._headers[1], json=data
-            ) as r:
-                self.result_data = (await r.json(loads=loads))[&#34;data&#34;][&#34;session&#34;]
+                if first:
+                    # 最初は普通とは違うやつもリクエストしないといけないのでする。
+                    async with self._session.options(
+                        make_url(session_id), headers=self._headers[0]
+                    ) as r:
+                        r.raise_for_status()
+                    first = False
 
-            self.print(&#34;Done.&#34;)
-            data = {&#34;session&#34;: self.result_data}
-            self.print(&#34;Received data&#34;, data)
+                async with self._session.post(
+                    make_url(session_id),
+                    headers=self._headers[1], json=data
+                ) as r:
+                    self.result_data = (await r.json(loads=loads))[&#34;data&#34;][&#34;session&#34;]
 
-        self._session.close()</code></pre>
+                self.print(&#34;Done.&#34;)
+                data = {&#34;session&#34;: self.result_data}
+
+                after = get_interval(now)
+            else:
+                await asyncio.sleep(0.05)</code></pre>
 </details>
 </section>
 <section>
@@ -386,7 +407,11 @@ Heartbeatを動かすまでこれはNoneです。</dd>
     ):
         self.loop: asyncio.AbstractEventLoop = loop or asyncio.get_event_loop()
         self._headers = headers or HEADERS
+        self._download_link = None
         self.heartbeat_task: asyncio.Task = None
+
+        if &#34;nico.ms&#34; in url:
+            url = url.replace(&#34;nico.ms/&#34;, &#34;www.nicovideo.jp/watch/&#34;)
 
         self._url, self._log = url, log
         self._data, self._download_link = {}, None
@@ -431,23 +456,27 @@ Heartbeatを動かすまでこれはNoneです。</dd>
         )
         await self.wait_until_working_heartbeat()
 
-    def close(self, close_loop: bool = True) -&gt; None:
+    def close(self) -&gt; None:
         &#34;&#34;&#34;NicoNicoVideoAsyncを終了します。  
         動画のダウンロードに必要な通信をするHeartbeatを止めます。  
         もし動画のダウンロードが終わったのならこれを実行してください。  
         `async with`構文を使用するのならこれを実行する必要はありません。  
         `async with`構文の使用例は`connect`にあります。
 
-        Parameters
-        ----------
-        close_loop : bool, default True
-            これの実行時に使用したイベントループも閉じるかどうかです。&#34;&#34;&#34;
+        Warnings
+        --------
+        これを使用してもイベントループは閉じません。&#34;&#34;&#34;
         self._stop = True
-        if close_loop and not self.loop.is_closed():
-            self.loop.close()
-
-    def __del__(self):
-        self.close()
+        if self.heartbeat_task:
+            try:
+                self.heartbeat_task.cancel()
+            except Exception as e:
+                if not isinstance(e, asyncio.CancelledError):
+                    raise e
+        if self.loop.is_closed():
+            self._session.detach()
+        else:
+            self.loop.create_task(self._session.close())
 
     async def get_info(self) -&gt; dict:
         &#34;&#34;&#34;ニコニコ動画のウェブページから動画のデータを取得するコルーチン関数です。
@@ -465,7 +494,7 @@ Heartbeatを動かすまでこれはNoneです。</dd>
         if not self._data:
             # もし動画データを取得していないなら動画URLのHTMLから動画データを取得する。
             # Heartbeatの通信にも必要なものでもあります。
-            async with self._session.get(self._url, headers=self._headers[0]) as r:
+            async with self._session.get(self._url, headers=self._headers[2]) as r:
                 soup = BeautifulSoup(await r.text(), &#34;html.parser&#34;)
                 data = soup.find(&#34;div&#34;, {&#34;id&#34;: &#34;js-initial-watch-data&#34;}).get(&#34;data-api-data&#34;)
                 if data:
@@ -503,15 +532,15 @@ Heartbeatを動かすまでこれはNoneです。</dd>
         ですのでHeartbeatを止める`close`はダウンロードリンクの使用が終わってから実行しましょう。  
         したがって`async with`構文を使用して取得したダウンロードリンクはすぐに使えなくなることがあるので注意してください。
         &#34;&#34;&#34;
-        if self.download_link is None:
+        if self._download_link is None:
             # Heartbeatが動いていないなら動かす。
             if not self.is_working_heartbeat():
                 await self.connect()
             # Heartbeatが動画のURLを取得するまで待機する。
             await self.wait_until_working_heartbeat()
-            self.download_link = self.result_data[&#34;content_uri&#34;]
+            self._download_link = self.result_data[&#34;content_uri&#34;]
 
-        return self.download_link
+        return self._download_link
 
     async def download(self, path: str, load_chunk_size: int = 1024) -&gt; None:
         &#34;&#34;&#34;ニコニコ動画の動画をダウンロードします。  
@@ -580,15 +609,15 @@ Heartbeatを動かすまでこれはNoneです。</dd>
             await self.get_info()
 
         # セッションに必要なデータを`NicoNicoVideoAsync.get_info`で取得したデータから取得します。
-        session = _make_sessiondata(
+        data = _make_sessiondata(
             self._data[&#34;media&#34;][&#34;delivery&#34;][&#34;movie&#34;], mode=mode
         )
-        self.print(&#34;Sending Heartbeat Init Data... :&#34;, dumps(session))
+        self.print(&#34;Sending Heartbeat Init Data... :&#34;, data)
 
         # 一番最初のHeartbeatの通信をします。
         async with self._session.post(
             URLS[&#34;base_heartbeat&#34;] + &#34;?_format=json&#34;,
-            headers=self._headers[1], json=session
+            headers=self._headers[1], json=data
         ) as r:
             self.result_data = (await r.json(loads=loads))[&#34;data&#34;][&#34;session&#34;]
         session_id = self.result_data[&#34;id&#34;]
@@ -596,30 +625,42 @@ Heartbeatを動かすまでこれはNoneです。</dd>
         self.print(&#34;Done. session_id. : &#34; + str(session_id))
         self._working_heartbeat.set()
 
-        data = self.result_data
+        data, first = {&#34;session&#34;: self.result_data}, True
+        get_interval = lambda now: now + data[&#34;session&#34;][&#34;keep_method&#34;][&#34;heartbeat&#34;][&#34;lifetime&#34;] / 1000 - 3
+        make_url = lambda session_id: f&#34;{URLS[&#39;base_heartbeat&#39;]}/{session_id}?_format=json&amp;_method=PUT&#34;
+        after = get_interval(time())
+
         while not self._stop:
+            now = time()
             # ここで定期的にHeartbeatを送ります。
-            await asyncio.sleep(
-                data[&#34;keep_method&#34;][&#34;heartbeat&#34;][&#34;lifetime&#34;] - 1
-            )
+            if now &gt;= after:
+                self.print(&#34;Sending heartbeat...&#34;, data)
 
-            self.print(&#34;Sending heartbeat...&#34;, data)
-            async with self._session.post(
-                URLS[&#34;base_heartbeat&#34;] + f&#34;/{session_id}?_format=json&amp;_method=PUT&#34;,
-                headers=self._headers[1], json=data
-            ) as r:
-                self.result_data = (await r.json(loads=loads))[&#34;data&#34;][&#34;session&#34;]
+                if first:
+                    # 最初は普通とは違うやつもリクエストしないといけないのでする。
+                    async with self._session.options(
+                        make_url(session_id), headers=self._headers[0]
+                    ) as r:
+                        r.raise_for_status()
+                    first = False
 
-            self.print(&#34;Done.&#34;)
-            data = {&#34;session&#34;: self.result_data}
-            self.print(&#34;Received data&#34;, data)
+                async with self._session.post(
+                    make_url(session_id),
+                    headers=self._headers[1], json=data
+                ) as r:
+                    self.result_data = (await r.json(loads=loads))[&#34;data&#34;][&#34;session&#34;]
 
-        self._session.close()</code></pre>
+                self.print(&#34;Done.&#34;)
+                data = {&#34;session&#34;: self.result_data}
+
+                after = get_interval(now)
+            else:
+                await asyncio.sleep(0.05)</code></pre>
 </details>
 <h3>Methods</h3>
 <dl>
 <dt id="niconico_dl.async_video_manager.NicoNicoVideoAsync.close"><code class="name flex">
-<span>def <span class="ident">close</span></span>(<span>self, close_loop: bool = True) ‑> None</span>
+<span>def <span class="ident">close</span></span>(<span>self) ‑> None</span>
 </code></dt>
 <dd>
 <div class="desc"><p>NicoNicoVideoAsyncを終了します。<br>
@@ -627,29 +668,33 @@ Heartbeatを動かすまでこれはNoneです。</dd>
 もし動画のダウンロードが終わったのならこれを実行してください。<br>
 <code>async with</code>構文を使用するのならこれを実行する必要はありません。<br>
 <code>async with</code>構文の使用例は<code>connect</code>にあります。</p>
-<h2 id="parameters">Parameters</h2>
-<dl>
-<dt><strong><code>close_loop</code></strong> :&ensp;<code>bool</code>, default <code>True</code></dt>
-<dd>これの実行時に使用したイベントループも閉じるかどうかです。</dd>
-</dl></div>
+<h2 id="warnings">Warnings</h2>
+<p>これを使用してもイベントループは閉じません。</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def close(self, close_loop: bool = True) -&gt; None:
+<pre><code class="python">def close(self) -&gt; None:
     &#34;&#34;&#34;NicoNicoVideoAsyncを終了します。  
     動画のダウンロードに必要な通信をするHeartbeatを止めます。  
     もし動画のダウンロードが終わったのならこれを実行してください。  
     `async with`構文を使用するのならこれを実行する必要はありません。  
     `async with`構文の使用例は`connect`にあります。
 
-    Parameters
-    ----------
-    close_loop : bool, default True
-        これの実行時に使用したイベントループも閉じるかどうかです。&#34;&#34;&#34;
+    Warnings
+    --------
+    これを使用してもイベントループは閉じません。&#34;&#34;&#34;
     self._stop = True
-    if close_loop and not self.loop.is_closed():
-        self.loop.close()</code></pre>
+    if self.heartbeat_task:
+        try:
+            self.heartbeat_task.cancel()
+        except Exception as e:
+            if not isinstance(e, asyncio.CancelledError):
+                raise e
+    if self.loop.is_closed():
+        self._session.detach()
+    else:
+        self.loop.create_task(self._session.close())</code></pre>
 </details>
 </dd>
 <dt id="niconico_dl.async_video_manager.NicoNicoVideoAsync.connect"><code class="name flex">
@@ -811,15 +856,15 @@ async with NicoNicoVideoAsync(url) as nico:
     ですのでHeartbeatを止める`close`はダウンロードリンクの使用が終わってから実行しましょう。  
     したがって`async with`構文を使用して取得したダウンロードリンクはすぐに使えなくなることがあるので注意してください。
     &#34;&#34;&#34;
-    if self.download_link is None:
+    if self._download_link is None:
         # Heartbeatが動いていないなら動かす。
         if not self.is_working_heartbeat():
             await self.connect()
         # Heartbeatが動画のURLを取得するまで待機する。
         await self.wait_until_working_heartbeat()
-        self.download_link = self.result_data[&#34;content_uri&#34;]
+        self._download_link = self.result_data[&#34;content_uri&#34;]
 
-    return self.download_link</code></pre>
+    return self._download_link</code></pre>
 </details>
 </dd>
 <dt id="niconico_dl.async_video_manager.NicoNicoVideoAsync.get_info"><code class="name flex">
@@ -857,7 +902,7 @@ async with NicoNicoVideoAsync(url) as nico:
     if not self._data:
         # もし動画データを取得していないなら動画URLのHTMLから動画データを取得する。
         # Heartbeatの通信にも必要なものでもあります。
-        async with self._session.get(self._url, headers=self._headers[0]) as r:
+        async with self._session.get(self._url, headers=self._headers[2]) as r:
             soup = BeautifulSoup(await r.text(), &#34;html.parser&#34;)
             data = soup.find(&#34;div&#34;, {&#34;id&#34;: &#34;js-initial-watch-data&#34;}).get(&#34;data-api-data&#34;)
             if data:
