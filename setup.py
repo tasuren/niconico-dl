@@ -1,5 +1,4 @@
 
-from niconico_dl import __version__, __author__
 from setuptools import setup
 from os.path import exists
 
@@ -17,15 +16,19 @@ if exists("requirements.txt"):
 else:
     requires = []
 
+with open("niconico_dl/__init__.py") as f:
+    text = f.read()
+    version = text.split("__version__ = ")[1].split("\n")[0]
+    author = text.split("__author__ = ")[1].split("\n")[0]
 
 setup(
     name='niconico_dl',
-    version=__version__,
+    version=version,
     description='ニコニコ動画ダウンローダー NicoNico Video Downloader',
     long_description=long_description,
     long_description_content_type="text/markdown",
     url='https://tasuren.github.io/niconico_dl/',
-    author=__author__,
+    author=author,
     author_email='tasuren5@gmail.com',
     license='MIT',
     keywords='niconico video download',
