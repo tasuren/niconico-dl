@@ -54,6 +54,9 @@ class NicoNicoVideoAsync:
 
         if "nico.ms" in url:
             url = url.replace("nico.ms/", "www.nicovideo.jp/watch/")
+        
+        if "sp" in url:
+            url = url.replace("sp", "www")
 
         self._url, self._log = url, log
         self._data, self._download_link = {}, None
