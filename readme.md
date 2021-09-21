@@ -33,3 +33,9 @@ asyncio.run(start_async())
 ### Command Line
 使用方法：`niconico_dl [URL]`  
 ダウンロードした動画は`output.mp4`という名前で実行したディレクトリに保存されます。
+
+## Notes
+もしDiscordのボイスチャットにニコニコ動画を流したい人は`NicoNicoVideoAsync.download`ではなく`NicoNicoVideoAsync.get_download_link`を使用して取得したダウンロードリンクで流すことを推奨します。  
+`download`は動画をダウンロードするため時間がかかります。
+なので`get_download_link`でダウンロードリンクを取得してそれを使い直接流すのを推奨します。  
+注意：`close`をお忘れなく、詳細はリファレンスを見てください。
