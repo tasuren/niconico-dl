@@ -82,10 +82,12 @@ class NicoNicoVideoAsync:
 
         if &#34;nico.ms&#34; in url:
             url = url.replace(&#34;nico.ms/&#34;, &#34;www.nicovideo.jp/watch/&#34;)
+        
+        if &#34;sp&#34; in url:
+            url = url.replace(&#34;sp&#34;, &#34;www&#34;)
 
         self._url, self._log = url, log
         self._data, self._download_link = {}, None
-        self._session = ClientSession(raise_for_status=True)
         self._working_heartbeat = asyncio.Event()
         self._stop = False
 
@@ -143,10 +145,6 @@ class NicoNicoVideoAsync:
             except Exception as e:
                 if not isinstance(e, asyncio.CancelledError):
                     raise e
-        if self.loop.is_closed():
-            self._session.detach()
-        else:
-            self.loop.create_task(self._session.close())
 
     async def get_info(self) -&gt; dict:
         &#34;&#34;&#34;ニコニコ動画のウェブページから動画のデータを取得するコルーチン関数です。
@@ -164,13 +162,18 @@ class NicoNicoVideoAsync:
         if not self._data:
             # もし動画データを取得していないなら動画URLのHTMLから動画データを取得する。
             # Heartbeatの通信にも必要なものでもあります。
-            async with self._session.get(self._url, headers=self._headers[2]) as r:
-                soup = BeautifulSoup(await r.text(), &#34;html.parser&#34;)
-                data = soup.find(&#34;div&#34;, {&#34;id&#34;: &#34;js-initial-watch-data&#34;}).get(&#34;data-api-data&#34;)
-                if data:
-                    self._data = loads(data)
-                else:
-                    raise NicoNicoAcquisitionFailed(&#34;ニコニコ動画から情報を取得するのに失敗しました。&#34;)
+            async with ClientSession(raise_for_status=True) as session:
+                async with session.get(self._url, headers=self._headers[2]) as r:
+                    soup = BeautifulSoup(await r.text(), &#34;html.parser&#34;)
+                    data = soup.find(
+                        &#34;div&#34;, {&#34;id&#34;: &#34;js-initial-watch-data&#34;}
+                    ).get(&#34;data-api-data&#34;)
+                    if data:
+                        self._data = loads(data)
+                    else:
+                        raise NicoNicoAcquisitionFailed(
+                            &#34;ニコニコ動画から情報を取得するのに失敗しました。&#34;
+                        )
         self.print(&#34;Done.&#34;)
         return self._data
 
@@ -252,23 +255,24 @@ class NicoNicoVideoAsync:
         BASE = &#34;Downloading video... :&#34;
         self.print(BASE, &#34;Now loading...&#34;, first=&#34;\r&#34;, end=&#34;&#34;)
 
-        async with self._session.get(url, headers=headers, params=params) as r:
-            size, now_size = r.content_length, 0
+        async with ClientSession(raise_for_status=True) as session:
+            async with session.get(url, headers=headers, params=params) as r:
+                size, now_size = r.content_length, 0
 
-            self.print(BASE, &#34;Making a null file...&#34;, first=&#34;\r&#34;, end=&#34;&#34;)
+                self.print(BASE, &#34;Making a null file...&#34;, first=&#34;\r&#34;, end=&#34;&#34;)
 
-            async with async_open(path, &#34;wb&#34;) as f:
-                await f.write(b&#34;&#34;)
-            async with async_open(path, &#34;ab&#34;) as f:
-                async for chunk in r.content.iter_chunked(load_chunk_size):
-                    if chunk:
-                        now_size += len(chunk)
-                        await f.write(chunk)
-                        self.print(
-                            BASE,
-                            f&#34;{int(now_size/size*100)}% ({now_size}/{size})&#34;,
-                            first=&#34;\r&#34;, end=&#34;&#34;
-                        )
+                async with async_open(path, &#34;wb&#34;) as f:
+                    await f.write(b&#34;&#34;)
+                async with async_open(path, &#34;ab&#34;) as f:
+                    async for chunk in r.content.iter_chunked(load_chunk_size):
+                        if chunk:
+                            now_size += len(chunk)
+                            await f.write(chunk)
+                            self.print(
+                                BASE,
+                                f&#34;{int(now_size/size*100)}% ({now_size}/{size})&#34;,
+                                first=&#34;\r&#34;, end=&#34;&#34;
+                            )
 
         self.print(&#34;Done.&#34;)
 
@@ -285,11 +289,12 @@ class NicoNicoVideoAsync:
         self.print(&#34;Sending Heartbeat Init Data... :&#34;, data)
 
         # 一番最初のHeartbeatの通信をします。
-        async with self._session.post(
-            URLS[&#34;base_heartbeat&#34;] + &#34;?_format=json&#34;,
-            headers=self._headers[1], json=data
-        ) as r:
-            self.result_data = (await r.json(loads=loads))[&#34;data&#34;][&#34;session&#34;]
+        async with ClientSession(raise_for_status=True) as session:
+            async with session.post(
+                URLS[&#34;base_heartbeat&#34;] + &#34;?_format=json&#34;,
+                headers=self._headers[1], json=data
+            ) as r:
+                self.result_data = (await r.json(loads=loads))[&#34;data&#34;][&#34;session&#34;]
         session_id = self.result_data[&#34;id&#34;]
 
         self.print(&#34;Done. session_id. : &#34; + str(session_id))
@@ -308,17 +313,19 @@ class NicoNicoVideoAsync:
 
                 if first:
                     # 最初は普通とは違うやつもリクエストしないといけないのでする。
-                    async with self._session.options(
-                        make_url(session_id), headers=self._headers[0]
-                    ) as r:
-                        r.raise_for_status()
+                    async with ClientSession(raise_for_status=True) as session:
+                        async with session.options(
+                            make_url(session_id), headers=self._headers[0]
+                        ) as r:
+                            r.raise_for_status()
                     first = False
 
-                async with self._session.post(
-                    make_url(session_id),
-                    headers=self._headers[1], json=data
-                ) as r:
-                    self.result_data = (await r.json(loads=loads))[&#34;data&#34;][&#34;session&#34;]
+                async with ClientSession(raise_for_status=True) as session:
+                    async with session.post(
+                        make_url(session_id),
+                        headers=self._headers[1], json=data
+                    ) as r:
+                        self.result_data = (await r.json(loads=loads))[&#34;data&#34;][&#34;session&#34;]
 
                 self.print(&#34;Done.&#34;)
                 data = {&#34;session&#34;: self.result_data}
@@ -412,10 +419,12 @@ Heartbeatを動かすまでこれはNoneです。</dd>
 
         if &#34;nico.ms&#34; in url:
             url = url.replace(&#34;nico.ms/&#34;, &#34;www.nicovideo.jp/watch/&#34;)
+        
+        if &#34;sp&#34; in url:
+            url = url.replace(&#34;sp&#34;, &#34;www&#34;)
 
         self._url, self._log = url, log
         self._data, self._download_link = {}, None
-        self._session = ClientSession(raise_for_status=True)
         self._working_heartbeat = asyncio.Event()
         self._stop = False
 
@@ -473,10 +482,6 @@ Heartbeatを動かすまでこれはNoneです。</dd>
             except Exception as e:
                 if not isinstance(e, asyncio.CancelledError):
                     raise e
-        if self.loop.is_closed():
-            self._session.detach()
-        else:
-            self.loop.create_task(self._session.close())
 
     async def get_info(self) -&gt; dict:
         &#34;&#34;&#34;ニコニコ動画のウェブページから動画のデータを取得するコルーチン関数です。
@@ -494,13 +499,18 @@ Heartbeatを動かすまでこれはNoneです。</dd>
         if not self._data:
             # もし動画データを取得していないなら動画URLのHTMLから動画データを取得する。
             # Heartbeatの通信にも必要なものでもあります。
-            async with self._session.get(self._url, headers=self._headers[2]) as r:
-                soup = BeautifulSoup(await r.text(), &#34;html.parser&#34;)
-                data = soup.find(&#34;div&#34;, {&#34;id&#34;: &#34;js-initial-watch-data&#34;}).get(&#34;data-api-data&#34;)
-                if data:
-                    self._data = loads(data)
-                else:
-                    raise NicoNicoAcquisitionFailed(&#34;ニコニコ動画から情報を取得するのに失敗しました。&#34;)
+            async with ClientSession(raise_for_status=True) as session:
+                async with session.get(self._url, headers=self._headers[2]) as r:
+                    soup = BeautifulSoup(await r.text(), &#34;html.parser&#34;)
+                    data = soup.find(
+                        &#34;div&#34;, {&#34;id&#34;: &#34;js-initial-watch-data&#34;}
+                    ).get(&#34;data-api-data&#34;)
+                    if data:
+                        self._data = loads(data)
+                    else:
+                        raise NicoNicoAcquisitionFailed(
+                            &#34;ニコニコ動画から情報を取得するのに失敗しました。&#34;
+                        )
         self.print(&#34;Done.&#34;)
         return self._data
 
@@ -582,23 +592,24 @@ Heartbeatを動かすまでこれはNoneです。</dd>
         BASE = &#34;Downloading video... :&#34;
         self.print(BASE, &#34;Now loading...&#34;, first=&#34;\r&#34;, end=&#34;&#34;)
 
-        async with self._session.get(url, headers=headers, params=params) as r:
-            size, now_size = r.content_length, 0
+        async with ClientSession(raise_for_status=True) as session:
+            async with session.get(url, headers=headers, params=params) as r:
+                size, now_size = r.content_length, 0
 
-            self.print(BASE, &#34;Making a null file...&#34;, first=&#34;\r&#34;, end=&#34;&#34;)
+                self.print(BASE, &#34;Making a null file...&#34;, first=&#34;\r&#34;, end=&#34;&#34;)
 
-            async with async_open(path, &#34;wb&#34;) as f:
-                await f.write(b&#34;&#34;)
-            async with async_open(path, &#34;ab&#34;) as f:
-                async for chunk in r.content.iter_chunked(load_chunk_size):
-                    if chunk:
-                        now_size += len(chunk)
-                        await f.write(chunk)
-                        self.print(
-                            BASE,
-                            f&#34;{int(now_size/size*100)}% ({now_size}/{size})&#34;,
-                            first=&#34;\r&#34;, end=&#34;&#34;
-                        )
+                async with async_open(path, &#34;wb&#34;) as f:
+                    await f.write(b&#34;&#34;)
+                async with async_open(path, &#34;ab&#34;) as f:
+                    async for chunk in r.content.iter_chunked(load_chunk_size):
+                        if chunk:
+                            now_size += len(chunk)
+                            await f.write(chunk)
+                            self.print(
+                                BASE,
+                                f&#34;{int(now_size/size*100)}% ({now_size}/{size})&#34;,
+                                first=&#34;\r&#34;, end=&#34;&#34;
+                            )
 
         self.print(&#34;Done.&#34;)
 
@@ -615,11 +626,12 @@ Heartbeatを動かすまでこれはNoneです。</dd>
         self.print(&#34;Sending Heartbeat Init Data... :&#34;, data)
 
         # 一番最初のHeartbeatの通信をします。
-        async with self._session.post(
-            URLS[&#34;base_heartbeat&#34;] + &#34;?_format=json&#34;,
-            headers=self._headers[1], json=data
-        ) as r:
-            self.result_data = (await r.json(loads=loads))[&#34;data&#34;][&#34;session&#34;]
+        async with ClientSession(raise_for_status=True) as session:
+            async with session.post(
+                URLS[&#34;base_heartbeat&#34;] + &#34;?_format=json&#34;,
+                headers=self._headers[1], json=data
+            ) as r:
+                self.result_data = (await r.json(loads=loads))[&#34;data&#34;][&#34;session&#34;]
         session_id = self.result_data[&#34;id&#34;]
 
         self.print(&#34;Done. session_id. : &#34; + str(session_id))
@@ -638,17 +650,19 @@ Heartbeatを動かすまでこれはNoneです。</dd>
 
                 if first:
                     # 最初は普通とは違うやつもリクエストしないといけないのでする。
-                    async with self._session.options(
-                        make_url(session_id), headers=self._headers[0]
-                    ) as r:
-                        r.raise_for_status()
+                    async with ClientSession(raise_for_status=True) as session:
+                        async with session.options(
+                            make_url(session_id), headers=self._headers[0]
+                        ) as r:
+                            r.raise_for_status()
                     first = False
 
-                async with self._session.post(
-                    make_url(session_id),
-                    headers=self._headers[1], json=data
-                ) as r:
-                    self.result_data = (await r.json(loads=loads))[&#34;data&#34;][&#34;session&#34;]
+                async with ClientSession(raise_for_status=True) as session:
+                    async with session.post(
+                        make_url(session_id),
+                        headers=self._headers[1], json=data
+                    ) as r:
+                        self.result_data = (await r.json(loads=loads))[&#34;data&#34;][&#34;session&#34;]
 
                 self.print(&#34;Done.&#34;)
                 data = {&#34;session&#34;: self.result_data}
@@ -690,11 +704,7 @@ Heartbeatを動かすまでこれはNoneです。</dd>
             self.heartbeat_task.cancel()
         except Exception as e:
             if not isinstance(e, asyncio.CancelledError):
-                raise e
-    if self.loop.is_closed():
-        self._session.detach()
-    else:
-        self.loop.create_task(self._session.close())</code></pre>
+                raise e</code></pre>
 </details>
 </dd>
 <dt id="niconico_dl.async_video_manager.NicoNicoVideoAsync.connect"><code class="name flex">
@@ -801,23 +811,24 @@ async with NicoNicoVideoAsync(url) as nico:
     BASE = &#34;Downloading video... :&#34;
     self.print(BASE, &#34;Now loading...&#34;, first=&#34;\r&#34;, end=&#34;&#34;)
 
-    async with self._session.get(url, headers=headers, params=params) as r:
-        size, now_size = r.content_length, 0
+    async with ClientSession(raise_for_status=True) as session:
+        async with session.get(url, headers=headers, params=params) as r:
+            size, now_size = r.content_length, 0
 
-        self.print(BASE, &#34;Making a null file...&#34;, first=&#34;\r&#34;, end=&#34;&#34;)
+            self.print(BASE, &#34;Making a null file...&#34;, first=&#34;\r&#34;, end=&#34;&#34;)
 
-        async with async_open(path, &#34;wb&#34;) as f:
-            await f.write(b&#34;&#34;)
-        async with async_open(path, &#34;ab&#34;) as f:
-            async for chunk in r.content.iter_chunked(load_chunk_size):
-                if chunk:
-                    now_size += len(chunk)
-                    await f.write(chunk)
-                    self.print(
-                        BASE,
-                        f&#34;{int(now_size/size*100)}% ({now_size}/{size})&#34;,
-                        first=&#34;\r&#34;, end=&#34;&#34;
-                    )
+            async with async_open(path, &#34;wb&#34;) as f:
+                await f.write(b&#34;&#34;)
+            async with async_open(path, &#34;ab&#34;) as f:
+                async for chunk in r.content.iter_chunked(load_chunk_size):
+                    if chunk:
+                        now_size += len(chunk)
+                        await f.write(chunk)
+                        self.print(
+                            BASE,
+                            f&#34;{int(now_size/size*100)}% ({now_size}/{size})&#34;,
+                            first=&#34;\r&#34;, end=&#34;&#34;
+                        )
 
     self.print(&#34;Done.&#34;)</code></pre>
 </details>
@@ -902,13 +913,18 @@ async with NicoNicoVideoAsync(url) as nico:
     if not self._data:
         # もし動画データを取得していないなら動画URLのHTMLから動画データを取得する。
         # Heartbeatの通信にも必要なものでもあります。
-        async with self._session.get(self._url, headers=self._headers[2]) as r:
-            soup = BeautifulSoup(await r.text(), &#34;html.parser&#34;)
-            data = soup.find(&#34;div&#34;, {&#34;id&#34;: &#34;js-initial-watch-data&#34;}).get(&#34;data-api-data&#34;)
-            if data:
-                self._data = loads(data)
-            else:
-                raise NicoNicoAcquisitionFailed(&#34;ニコニコ動画から情報を取得するのに失敗しました。&#34;)
+        async with ClientSession(raise_for_status=True) as session:
+            async with session.get(self._url, headers=self._headers[2]) as r:
+                soup = BeautifulSoup(await r.text(), &#34;html.parser&#34;)
+                data = soup.find(
+                    &#34;div&#34;, {&#34;id&#34;: &#34;js-initial-watch-data&#34;}
+                ).get(&#34;data-api-data&#34;)
+                if data:
+                    self._data = loads(data)
+                else:
+                    raise NicoNicoAcquisitionFailed(
+                        &#34;ニコニコ動画から情報を取得するのに失敗しました。&#34;
+                    )
     self.print(&#34;Done.&#34;)
     return self._data</code></pre>
 </details>

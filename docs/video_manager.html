@@ -72,6 +72,9 @@ class NicoNicoVideo:
 
         if &#34;nico.ms&#34; in url:
             url = url.replace(&#34;nico.ms/&#34;, &#34;www.nicovideo.jp/watch/&#34;)
+        
+        if &#34;sp&#34; in url:
+            url = url.replace(&#34;sp&#34;, &#34;www&#34;)
 
         self._url, self._log = url, log
         self._data, self._download_link = {}, None
@@ -382,6 +385,9 @@ Heartbeatを動かすまでこれはNoneです。</dd>
 
         if &#34;nico.ms&#34; in url:
             url = url.replace(&#34;nico.ms/&#34;, &#34;www.nicovideo.jp/watch/&#34;)
+        
+        if &#34;sp&#34; in url:
+            url = url.replace(&#34;sp&#34;, &#34;www&#34;)
 
         self._url, self._log = url, log
         self._data, self._download_link = {}, None
