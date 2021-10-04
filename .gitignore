@@ -3,6 +3,7 @@ __pycahce__
 */__pycache__
 *.sublime-project
 *.sublime-workspace
+*.code-workspace
 build/
 dist/
 niconico_dl.egg-info/
