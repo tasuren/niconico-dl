@@ -1,4 +1,0 @@
-aiofiles
-aiohttp
-bs4
-requests

@@ -10,16 +10,11 @@ else:
     long_description = "..."
 
 
-if exists("requirements.txt"):
-    with open("requirements.txt", "r") as f:
-        requires = f.read().splitlines()
-else:
-    requires = []
-
 with open("niconico_dl/__init__.py", "r") as f:
     text = f.read()
     version = text.split('__version__ = "')[1].split('"')[0]
     author = text.split('__author__ = "')[1].split('"')[0]
+
 
 setup(
     name='niconico_dl',
@@ -40,7 +35,7 @@ setup(
             "niconico_dl = niconico_dl.__main__:main"
         ]
     },
-    install_requires=requires,
+    install_requires=["aiofiles", "aiohttp", "requests", "bs4"],
     classifiers=[
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
