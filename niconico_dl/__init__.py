@@ -9,4 +9,4 @@ from .video_manager import *
 __all__ = ("HEADERS", "NicoNicoAcquisitionFailed",
            "NicoNicoVideoAsync", "NicoNicoVideo")
 __author__ = "tasuren"
-__version__ = "2.2.7"
+__version__ = "2.2.8"
