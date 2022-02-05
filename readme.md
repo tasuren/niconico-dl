@@ -1,6 +1,11 @@
 ![PyPI](https://img.shields.io/pypi/v/niconico-dl) ![PyPI - Downloads](https://img.shields.io/pypi/dm/niconico_dl)
 # niconico_dl
 ニコニコ動画にある動画をダウンロードするためのPython用のライブラリです。  
+
+**警告！**
+このniconico_dlは開発が停止して、アップデートもこれからありません。  
+代わりに[こちら](https://github.com/tasuren/niconico.py)を使用してください。
+
 リファレンス：https://tasuren.github.io/niconico_dl/  
 Github：https://github.com/tasuren/niconico_dl/
 
