@@ -2,7 +2,7 @@
 # niconico_dl
 ニコニコ動画にある動画をダウンロードするためのPython用のライブラリです。  
 
-**警告！**. 
+**警告！**  
 このniconico_dlは開発が停止して、アップデートもこれからありません。  
 代わりに[こちら](https://github.com/tasuren/niconico.py)を使用してください。
 
