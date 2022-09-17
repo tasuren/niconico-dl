@@ -4,7 +4,7 @@
 
 **警告！**  
 このniconico_dlは開発が停止して、アップデートもこれからありません。  
-代わりに[こちら](https://github.com/tasuren/niconico.py)を使用してください。
+代わりに[こちら](https://github.com/niconicolibs/niconico.py)を使用してください。
 
 リファレンス：https://tasuren.github.io/niconico_dl/  
 Github：https://github.com/tasuren/niconico_dl/
