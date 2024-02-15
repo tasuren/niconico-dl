@@ -6,8 +6,8 @@
 このniconico_dlは開発が停止して、アップデートもこれからありません。  
 代わりに[こちら](https://github.com/niconicolibs/niconico.py)を使用してください。
 
-リファレンス：https://tasuren.github.io/niconico_dl/  
-Github：https://github.com/tasuren/niconico_dl/
+リファレンス：https://tasuren.github.io/niconico-dl/  
+GitHub：https://github.com/tasuren/niconico-dl/
 
 ## Install
 `pip install niconico_dl`
